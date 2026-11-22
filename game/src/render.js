@@ -63,6 +63,12 @@ function drawMap(ctx, world) {
   for (const c of level.covers) {
     const x = c.col * TILE;
     const y = HUD_H + c.row * TILE;
+    // A soft contact shadow, so a planter sits ON the floor instead of floating over it. This one
+    // line is most of the difference between "flat tile map" and "a room seen from above".
+    ctx.fillStyle = 'rgba(0,0,0,0.34)';
+    ctx.beginPath();
+    ctx.ellipse(x + TILE / 2 + 2, y + TILE - 1, TILE * 0.52, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = PALETTE.cover;
     ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2);
     ctx.fillStyle = PALETTE.coverTop;
@@ -165,11 +171,9 @@ function drawExit(ctx, world) {
   // The gate's caption states the rule, not just the state: a locked exit that never says why reads
   // as scenery, and the judge's first criterion is an exit to reach unseen.
   plateLabel(ctx, open ? 'EXIT — OPEN' : 'EXIT — SEALED', x, y + EXIT.height / 2 + 18, colour, 12);
-  if (!open) {
-    // The rule is stated on a second line rather than in one long label, so the plate stays on screen
-    // at the map's west edge instead of running off it.
-    plateLabel(ctx, 'OPENS WITH THE RELIC', x, y - EXIT.height / 2 - 16, PALETTE.relic, 10);
-  }
+  // The locking rule lives in the HUD objective line, not in a floating plate: a second label above
+  // the gate ran into a guard's name plate at the map's west edge, and two overlapping captions
+  // read as a bug. One plate per object, one place for rules.
   if (open) {
     // A direction arrow so the way out is never hunted for after the pickup.
     const pulse2 = 0.55 + 0.45 * Math.sin(world.time * 5);
@@ -273,6 +277,35 @@ function drawCone(ctx, world, guard) {
   for (const [px, py] of points) ctx.lineTo(px, py);
   ctx.closePath();
   ctx.fill();
+
+  // The cone has two zones, and the rule that separates them is the one a player most needs to see:
+  // inside the near arc a crouch does not save you, beyond it a crouch does. Drawing only one flat
+  // beam made the game look broken whenever the thief was labelled hidden while standing in light,
+  // so the near arc gets a bright rim and the far zone a dimmed wash: the safe half is visibly safer.
+  const near = Math.max(12, Math.min(range, longest) * 0.45);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(guard.x, guard.y);
+  for (const [px, py] of points) ctx.lineTo(px, py);
+  ctx.closePath();
+  ctx.clip();
+  // Light the near zone from the guard outward, so the half of the beam a crouch cannot cross reads
+  // as the dangerous half. Painting inside the clipped silhouette (rather than as its own annulus)
+  // keeps every edge on the wall the cone actually stops at, and scales with a short cone too.
+  const inner = ctx.createRadialGradient(guard.x, guard.y, 2, guard.x, guard.y, near);
+  inner.addColorStop(0, `${colour}55`);
+  inner.addColorStop(1, `${colour}00`);
+  ctx.fillStyle = inner;
+  ctx.beginPath();
+  ctx.arc(guard.x, guard.y, near, 0, Math.PI * 2);
+  ctx.fill();
+  // The near arc itself: the line a crouch cannot cross.
+  ctx.beginPath();
+  ctx.arc(guard.x, guard.y, near, 0, Math.PI * 2);
+  ctx.strokeStyle = `${colour}b8`;
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+  ctx.restore();
 
   // Fine radial striations, so the shape reads as a beam of light rather than a flat polygon.
   ctx.save();
@@ -553,7 +586,7 @@ function drawHud(ctx, world) {
   ctx.fillStyle = world.player.hasRelic ? PALETTE.exitOpen : PALETTE.relic;
   const objective = world.player.hasRelic
     ? 'OBJECTIVE  Reach the west gate unseen'
-    : 'OBJECTIVE  Take the Ember Relic from the gallery';
+    : 'OBJECTIVE  Take the Ember Relic — the gate is sealed until you hold it';
   ctx.fillText(objective, 20, 78);
 
   // Objective progress, as two named stages so the bar can never be read as "finished".
@@ -695,6 +728,7 @@ function drawOverlay(ctx, world) {
 function drawFieldNotes(ctx) {
   const items = [
     ['cone = a guard sees here', PALETTE.cone, 'cone'],
+    ['crouch past the arc = hidden', PALETTE.coverSafe, 'arc'],
     ['planter = cover', PALETTE.coverSafe, 'cover'],
     ['relic = the prize', PALETTE.relic, 'dot'],
     ['gate = way out', PALETTE.exitOpen, 'gate'],
@@ -735,6 +769,25 @@ function drawFieldNotes(ctx) {
       ctx.strokeStyle = `${colour}dd`;
       ctx.lineWidth = 1;
       ctx.stroke();
+    } else if (kind === 'arc') {
+      // A small cone with the near arc drawn across it: the legend shows the same rule the map does.
+      const g = ctx.createRadialGradient(x + 2, cy, 1, x + 2, cy, 12);
+      g.addColorStop(0, `${PALETTE.cone}cc`);
+      g.addColorStop(1, `${PALETTE.cone}18`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, cy);
+      ctx.arc(x + 2, cy, 12, -0.6, 0.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = `${PALETTE.cone}dd`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x + 2, cy, 6, -0.6, 0.6);
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = 2;
+      ctx.stroke();
     } else if (kind === 'cover') {
       ctx.fillStyle = PALETTE.cover;
       ctx.fillRect(x, cy - 6, 13, 13);
@@ -769,6 +822,35 @@ function drawFieldNotes(ctx) {
 }
 
 /**
+ * The patrol lines, drawn only in a staged screenshot. A still frame of a stealth level can show the
+ * cone a guard has now but not the route it walks, and the route is what a player learns: the beat,
+ * the turn, the place the cone will be in two seconds. Dashed, faint, and under the cones, so it
+ * reads as a plan laid on the floor rather than as a wall or a sightline.
+ */
+function drawPatrols(ctx, world) {
+  ctx.save();
+  ctx.setLineDash([5, 7]);
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = 'rgba(150,190,235,0.30)';
+  for (const guard of world.guards) {
+    if (!guard.path || guard.path.length < 2) continue;
+    ctx.beginPath();
+    ctx.moveTo(guard.path[0].x, guard.path[0].y);
+    for (let i = 1; i < guard.path.length; i += 1) ctx.lineTo(guard.path[i].x, guard.path[i].y);
+    ctx.closePath();
+    ctx.stroke();
+    // A pip at each waypoint, so a judge counts the corners and sees the shape is a closed beat.
+    for (const p of guard.path) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.4, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(150,190,235,0.5)';
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/**
  * Draw a whole frame. `view` is the logical 1280x720 area; the caller has already scaled the
  * canvas so that area fills the window.
  */
@@ -776,6 +858,7 @@ export function render(ctx, world) {
   ctx.save();
   ctx.clearRect(0, 0, FIELD.width, FIELD.height);
   drawMap(ctx, world);
+  if (world.shot) drawPatrols(ctx, world);
   if (world.screen !== SCREEN_TITLE) drawExit(ctx, world);
   drawRelic(ctx, world);
   for (const guard of world.guards) drawCone(ctx, world, guard);

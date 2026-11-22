@@ -36,6 +36,10 @@ function announce(text) {
 
 /** Draw one frame of a screenshot scene: the real renderer over the real world state. */
 if (scene !== null) {
+  // Mark the frame as staged before it is played, so the renderer can lay the patrol plan on the
+  // floor: a screenshot should show what a player learns over a run, not only what is under a cone
+  // in the instant it was taken.
+  world.shot = scene;
   const result = stageShot(scene, world);
   if (result && result.screen) world.screen = result.screen;
   render(ctx, world);

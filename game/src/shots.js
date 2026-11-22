@@ -9,7 +9,7 @@ import { lineOfSight } from './guard.js';
 import { opaqueAt, tileOf } from './level.js';
 import { begin, reset, step } from './world.js';
 
-export const SCENES = ['title', 'relic', 'escape', 'chase'];
+export const SCENES = ['title', 'relic', 'cover', 'escape', 'chase'];
 
 /** Which scene this page was opened for, or null for a live game. */
 export function shotName() {
@@ -167,6 +167,27 @@ export function stageShot(name, world) {
       },
       () => held,
       8,
+    );
+    world.player.crouched = true;
+    return { screen: 'play' };
+  }
+
+  if (name === 'cover') {
+    // Park the thief behind the planter that Sorrel's patrol sweeps past, and hold until the cone is
+    // actually on the planter. The frame then shows the mechanic the whole game rests on: the cone
+    // stops at the planter, and the thief stands in its shadow, unseen.
+    const hide = { x: 6 * TILE + TILE / 2, y: MAP.top + 15 * TILE + TILE / 2 };
+    play(world, (w) => Math.hypot(w.player.x - hide.x, w.player.y - hide.y) < 20, () => hide, 150);
+    world.player.crouched = true;
+    play(
+      world,
+      (w) => {
+        const sorrel = w.guards.find((g) => g.name === 'Sorrel');
+        if (!sorrel) return true;
+        return Math.hypot(sorrel.x - w.player.x, sorrel.y - w.player.y) < 210 && Math.abs(sorrel.facing) < 0.9;
+      },
+      () => hide,
+      14,
     );
     world.player.crouched = true;
     return { screen: 'play' };

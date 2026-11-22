@@ -71,11 +71,12 @@ const ROUTES = [
     id: 'g5',
     name: 'Sorrel',
     post: 'the potting shed',
-    // A long horizontal beat down the potting shed with a single-tile return, rather than a
-    // rectangle: the shed is only four tiles tall, so a tall loop would spend most of its time
-    // facing into the south wall with a cone clipped to nothing. This loop keeps its cone long.
-    points: [{ x: 3, y: 15 }, { x: 13, y: 15 }, { x: 13, y: 16 }, { x: 3, y: 16 }],
-    dwell: [1.0, 0.9, 1.0, 0.9],
+    // The shed's east half only: rows 15 and 16 both carry planters, and a guard that walked those
+    // would wedge on the cover and never patrol at all. The legs stay on the free rows 14 and 17, and
+    // they stop short of the gate at column 3 so the last stretch before the way out keeps a timing
+    // gap: a patrol with no gap is not a puzzle, it is a wall.
+    points: [{ x: 6, y: 14 }, { x: 13, y: 14 }, { x: 13, y: 17 }, { x: 6, y: 17 }],
+    dwell: [1.2, 1.0, 1.2, 1.0],
   },
   {
     id: 'g6',
