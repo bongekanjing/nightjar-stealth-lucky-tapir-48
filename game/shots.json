@@ -1,0 +1,6 @@
+[
+  { "name": "1-ember-gallery.jpg", "query": "?shot=relic" },
+  { "name": "2-west-gate.jpg", "query": "?shot=escape" },
+  { "name": "3-alarm.jpg", "query": "?shot=chase" },
+  { "name": "4-title.jpg", "query": "?shot=title" }
+]
