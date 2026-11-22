@@ -153,18 +153,20 @@ export function stageShot(name, world) {
   const level = world.level;
 
   if (name === 'relic') {
-    // Approach the plinth, but stop on the first frame where a guard's cone actually falls on the
-    // relic tile: the still has to show the objective contested, not a relic in an empty room. If
-    // the patrol never obliges within the time budget, the plain proximity frame stands.
+    // Approach the plinth, then hold still until a guard's cone actually falls across the relic
+    // tile. The still has to show the objective contested, not a relic in an empty room, and
+    // holding still is what keeps the shot from ending in a pickup.
+    play(world, (w) => Math.hypot(w.player.x - w.level.relic.x, w.player.y - w.level.relic.y) < 96, () => level.relic, 120);
+    world.player.crouched = true;
+    const held = { x: world.player.x, y: world.player.y };
     play(
       world,
       (w) => {
         const { col, row } = tileOf(w.level.relic.x, w.level.relic.y);
-        const near = Math.hypot(w.player.x - w.level.relic.x, w.player.y - w.level.relic.y) < 96;
-        return near && tileExposed(w, col, row);
+        return tileExposed(w, col, row);
       },
-      () => level.relic,
-      120,
+      () => held,
+      8,
     );
     world.player.crouched = true;
     return { screen: 'play' };
