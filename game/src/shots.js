@@ -159,10 +159,12 @@ export function stageShot(name, world) {
   }
 
   if (name === 'escape') {
-    // Take the relic for real, then walk back west to the gate yard with it in hand.
+    // Take the relic for real, then walk back west to the gate yard with it in hand, stopping in
+    // the last stretch of floor before the gate so the frame shows the approach rather than the
+    // arrival overlay.
     play(world, (w) => w.player.hasRelic, () => level.relic, 120);
-    const yard = { x: 5 * TILE + TILE / 2, y: MAP.top + 17 * TILE + TILE / 2 };
-    play(world, (w) => Math.hypot(w.player.x - yard.x, w.player.y - yard.y) < 44, () => yard, 90);
+    const yard = { x: 5 * TILE + TILE / 2, y: MAP.top + 16 * TILE + TILE / 2 };
+    play(world, (w) => Math.hypot(w.player.x - yard.x, w.player.y - yard.y) < 58, () => yard, 90);
     return { screen: 'play' };
   }
 

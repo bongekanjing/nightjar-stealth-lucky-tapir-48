@@ -1,5 +1,11 @@
 # Nightjar
 
+[![Make the best stealth game](https://make.fun/badge/best-stealth-game-20261121-1759.svg)](https://make.fun/bounty/best-stealth-game-20261121-1759)
+[![Rank](https://make.fun/badge/best-stealth-game-20261121-1759/bongekanjing/nightjar-stealth-lucky-tapir-48/rank.svg)](https://make.fun/bounty/best-stealth-game-20261121-1759)
+[![Reward](https://make.fun/badge/best-stealth-game-20261121-1759/bongekanjing/nightjar-stealth-lucky-tapir-48/reward.svg)](https://make.fun/bounty/best-stealth-game-20261121-1759)
+
+An entry in [Make the best stealth game](https://make.fun/bounty/best-stealth-game-20261121-1759) on make.fun.
+
 A complete stealth game in one 1280×720 canvas: a gardener-thief crosses an old glasshouse at
 night, takes the Ember Relic from the central gallery, and leaves through the west gate without a
 single guard raising the alarm.

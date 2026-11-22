@@ -67,6 +67,7 @@ export const PALETTE = {
   cover: '#2f5a44',
   coverTop: '#3f7a5c',
   coverHatch: '#6d9a7e',
+  coverSafe: '#8ef7c0',
   relic: '#ffd479',
   exitLocked: '#5a6474',
   exitOpen: '#5ce6a4',

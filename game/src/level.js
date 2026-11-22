@@ -69,12 +69,13 @@ const ROUTES = [
   },
   {
     id: 'g5',
-    name: 'Ember',
+    name: 'Sorrel',
     post: 'the potting shed',
-    // This loop watches the approach to the west gate but deliberately leaves the gate pocket
-    // itself (columns 1-2) unwatched, so a player who has read the patrol has somewhere to go.
-    points: [{ x: 5, y: 14 }, { x: 12, y: 14 }, { x: 12, y: 17 }, { x: 5, y: 17 }],
-    dwell: [1.2, 1.0, 1.2, 1.0],
+    // A long horizontal beat down the potting shed with a single-tile return, rather than a
+    // rectangle: the shed is only four tiles tall, so a tall loop would spend most of its time
+    // facing into the south wall with a cone clipped to nothing. This loop keeps its cone long.
+    points: [{ x: 3, y: 15 }, { x: 13, y: 15 }, { x: 13, y: 16 }, { x: 3, y: 16 }],
+    dwell: [1.0, 0.9, 1.0, 0.9],
   },
   {
     id: 'g6',

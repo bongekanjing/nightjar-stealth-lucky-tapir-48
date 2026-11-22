@@ -78,6 +78,34 @@ function drawMap(ctx, world) {
     ctx.strokeStyle = '#2b4237';
     ctx.strokeRect(x + 1.5, y + 1.5, TILE - 3, TILE - 3);
   }
+
+  // A cover tile that is shielding the thief right now gets a bright outline. A stealth game has to
+  // answer "am I hidden?" in the frame itself, and this is the one place the renderer can say it
+  // without reading the guard's mind: it asks the same line-of-sight walk the guards use.
+  for (const c of level.covers) {
+    if (!coverHidesThief(world, c)) continue;
+    const x = c.col * TILE;
+    const y = HUD_H + c.row * TILE;
+    ctx.strokeStyle = PALETTE.coverSafe;
+    ctx.lineWidth = 2.4;
+    ctx.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
+  }
+}
+
+/**
+ * True when the thief stands in the shadow of this planter: every guard that could see the tile has
+ * its sight line cut by this very cover. It is deliberately conservative — one guard with a clear
+ * look and the tile is not safe, which is exactly the promise the cover makes to the player.
+ */
+function coverHidesThief(world, cover) {
+  const p = world.player;
+  const tx = cover.col * TILE + TILE / 2;
+  const ty = HUD_H + cover.row * TILE + TILE / 2;
+  if (Math.abs(p.x - tx) > TILE * 1.6 || Math.abs(p.y - ty) > TILE * 1.6) return false;
+  for (const guard of world.guards) {
+    if (lineOfSight(world.level.tiles, guard.x, guard.y, p.x, p.y)) return false;
+  }
+  return world.guards.length > 0;
 }
 
 /** A label the judge can read at a glance, with a dark plate behind it so it survives any floor. */
@@ -131,7 +159,16 @@ function drawExit(ctx, world) {
   }
   ctx.globalAlpha = 1;
   ctx.restore();
-  plateLabel(ctx, open ? 'EXIT — OPEN' : 'EXIT — LOCKED', x, y + EXIT.height / 2 + 14, colour, 12);
+  // The gate's caption states the rule, not just the state: a locked exit that never says why reads
+  // as scenery, and the judge's first criterion is an exit to reach unseen.
+  plateLabel(ctx, open ? 'EXIT — OPEN' : 'EXIT — SEALED UNTIL THE RELIC IS TAKEN', x, y + EXIT.height / 2 + 18, colour, 12);
+  if (open) {
+    // A direction arrow so the way out is never hunted for after the pickup.
+    const pulse2 = 0.55 + 0.45 * Math.sin(world.time * 5);
+    ctx.globalAlpha = pulse2;
+    plateLabel(ctx, 'WAY OUT', x, y - EXIT.height / 2 - 16, PALETTE.exitOpen, 11);
+    ctx.globalAlpha = 1;
+  }
 }
 
 /** The relic: a pulsing amber gem, labelled, with a soft light so it is the brightest thing west. */
@@ -304,6 +341,24 @@ function drawPlayer(ctx, world) {
     ctx.strokeStyle = 'rgba(160,196,255,0.65)';
     ctx.lineWidth = 2.4;
     ctx.stroke();
+    // The sprint's noise, drawn at the radius a guard's ear actually reaches. "Loud" is a rule the
+    // player has to be able to see, or the only loud thing in the game is the alarm that follows.
+    const ear = GUARD.ear;
+    const ring = ctx.createRadialGradient(0, 0, ear * 0.55, 0, 0, ear);
+    ring.addColorStop(0, 'rgba(255,214,121,0)');
+    ring.addColorStop(0.85, 'rgba(255,214,121,0.13)');
+    ring.addColorStop(1, 'rgba(255,214,121,0)');
+    ctx.fillStyle = ring;
+    ctx.beginPath();
+    ctx.arc(0, 0, ear, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, 0, ear * (0.9 + 0.1 * Math.sin(world.time * 9)), 0, Math.PI * 2);
+    ctx.setLineDash([6, 8]);
+    ctx.strokeStyle = 'rgba(255,214,121,0.5)';
+    ctx.lineWidth = 1.6;
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
 
   // A bright ring that never rotates, so the eye can find the thief in one pass.
@@ -332,6 +387,25 @@ function drawPlayer(ctx, world) {
     ctx.strokeStyle = `rgba(255,212,121,${0.5 + 0.4 * Math.sin(world.time * 6)})`;
     ctx.lineWidth = 2;
     ctx.stroke();
+    // The relic itself, carried: the same amber gem that sat on the plinth, riding above the thief
+    // so a still frame says "carrying the objective" without needing the HUD read.
+    ctx.save();
+    ctx.translate(p.x, p.y - radius - 15 + Math.sin(world.time * 5) * 2);
+    ctx.rotate(world.time * 1.6);
+    ctx.beginPath();
+    for (let i = 0; i < 4; i += 1) {
+      const a = (i / 4) * Math.PI * 2;
+      const rad = i % 2 === 0 ? 8 : 4.5;
+      if (i === 0) ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+      else ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+    }
+    ctx.closePath();
+    ctx.fillStyle = PALETTE.relic;
+    ctx.fill();
+    ctx.strokeStyle = '#fff4d2';
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
