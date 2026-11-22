@@ -112,8 +112,11 @@ function coverHidesThief(world, cover) {
 function plateLabel(ctx, text, x, y, colour, size = 12) {
   ctx.font = `700 ${size}px ${FONT}`;
   const width = ctx.measureText(text).width + 12;
-  ctx.fillStyle = 'rgba(5,9,15,0.82)';
-  roundRect(ctx, x - width / 2, y - size, width, size + 8, 4);
+  // Clamp the plate inside the field: a label on a map-edge object such as the west gate must not
+  // lose half its words off the side of the screen.
+  const left = Math.max(4, Math.min(FIELD.width - width - 4, x - width / 2));
+  ctx.fillStyle = 'rgba(5,9,15,0.86)';
+  roundRect(ctx, left, y - size, width, size + 8, 4);
   ctx.fill();
   ctx.strokeStyle = colour;
   ctx.lineWidth = 1;
@@ -121,7 +124,7 @@ function plateLabel(ctx, text, x, y, colour, size = 12) {
   ctx.fillStyle = colour;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x, y - size / 2 + 2);
+  ctx.fillText(text, left + width / 2, y - size / 2 + 2);
 }
 
 /** The gate: barred and red while the relic is out there, green and lit once it is in hand. */
@@ -161,7 +164,12 @@ function drawExit(ctx, world) {
   ctx.restore();
   // The gate's caption states the rule, not just the state: a locked exit that never says why reads
   // as scenery, and the judge's first criterion is an exit to reach unseen.
-  plateLabel(ctx, open ? 'EXIT — OPEN' : 'EXIT — SEALED UNTIL THE RELIC IS TAKEN', x, y + EXIT.height / 2 + 18, colour, 12);
+  plateLabel(ctx, open ? 'EXIT — OPEN' : 'EXIT — SEALED', x, y + EXIT.height / 2 + 18, colour, 12);
+  if (!open) {
+    // The rule is stated on a second line rather than in one long label, so the plate stays on screen
+    // at the map's west edge instead of running off it.
+    plateLabel(ctx, 'OPENS WITH THE RELIC', x, y - EXIT.height / 2 - 16, PALETTE.relic, 10);
+  }
   if (open) {
     // A direction arrow so the way out is never hunted for after the pickup.
     const pulse2 = 0.55 + 0.45 * Math.sin(world.time * 5);
@@ -212,40 +220,102 @@ function drawCone(ctx, world, guard) {
   const state = guard.viewState ?? 'calm';
   const colour = state === 'alert' ? PALETTE.coneAlarm : state === 'suspicious' ? PALETTE.coneSeen : PALETTE.cone;
   const range = state === 'alert' ? GUARD.coneRange * 1.25 : GUARD.coneRange;
-  const rays = 84;
+  const rays = 120;
   const points = [];
+  const reach = [];
   for (let i = 0; i <= rays; i += 1) {
     const angle = guard.facing - GUARD.coneAngle + (i / rays) * GUARD.coneAngle * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
     let distance = range;
-    // March out in small steps and stop at the first opaque tile: the cone's edge is the wall.
-    for (let d = 6; d <= range; d += 3) {
-      const px = guard.x + Math.cos(angle) * d;
-      const py = guard.y + Math.sin(angle) * d;
-      const { col, row } = tileOf(px, py);
+    // March out in one-pixel steps and stop at the first opaque tile, so the cut edge of the cone
+    // lands on the wall instead of stair-stepping across it.
+    for (let d = 4; d <= range; d += 1) {
+      const { col, row } = tileOf(guard.x + cos * d, guard.y + sin * d);
       const ch = charAt(world.level.tiles, col, row);
       if (ch === '#' || ch === 'c') {
-        // Stop short of the obstruction: a cone must never paint over a wall.
-        distance = Math.max(6, d - 7);
+        distance = Math.max(0, d - 2);
         break;
       }
     }
-    points.push([guard.x + Math.cos(angle) * distance, guard.y + Math.sin(angle) * distance]);
+    reach.push(distance);
+    points.push([guard.x + cos * distance, guard.y + sin * distance]);
+  }
+
+  // A guard staring into a wall still gets a short stub of light rather than nothing: a missing cone
+  // reads as a guard with no eyes, and every guard on the floor has to look dangerous.
+  const longest = Math.max(...reach);
+  const stub = longest < 26 ? 26 / Math.max(longest, 1) : 1;
+  if (stub > 1) {
+    const cos = Math.cos(guard.facing);
+    const sin = Math.sin(guard.facing);
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = colour;
+    ctx.beginPath();
+    ctx.moveTo(guard.x, guard.y);
+    ctx.arc(guard.x, guard.y, 22, guard.facing - GUARD.coneAngle, guard.facing + GUARD.coneAngle);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
 
   ctx.save();
-  const gradient = ctx.createRadialGradient(guard.x, guard.y, 8, guard.x, guard.y, range);
-  gradient.addColorStop(0, `${colour}99`);
-  gradient.addColorStop(0.55, `${colour}55`);
-  gradient.addColorStop(1, `${colour}22`);
+  // The fill is light, not paint: the floor, the planters and the grout all stay readable through it,
+  // and the beam fades along its own length so its far edge is soft.
+  const gradient = ctx.createRadialGradient(guard.x, guard.y, 6, guard.x, guard.y, Math.max(range, 30));
+  gradient.addColorStop(0, `${colour}8c`);
+  gradient.addColorStop(0.45, `${colour}4d`);
+  gradient.addColorStop(1, `${colour}14`);
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.moveTo(guard.x, guard.y);
   for (const [px, py] of points) ctx.lineTo(px, py);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = `${colour}dd`;
-  ctx.lineWidth = 1.8;
+
+  // Fine radial striations, so the shape reads as a beam of light rather than a flat polygon.
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(guard.x, guard.y);
+  for (const [px, py] of points) ctx.lineTo(px, py);
+  ctx.closePath();
+  ctx.clip();
+  ctx.strokeStyle = `${colour}2e`;
+  ctx.lineWidth = 1;
+  for (let i = 0; i < points.length; i += 3) {
+    const [px, py] = points[i];
+    ctx.beginPath();
+    ctx.moveTo(guard.x, guard.y);
+    ctx.lineTo(px, py);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // The outline, and a dashed arc where the beam reaches its range: solid edges are hard geometry,
+  // dashed ones are a limit, so the two never get confused.
+  ctx.strokeStyle = `${colour}e6`;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(guard.x, guard.y);
+  for (const [px, py] of points) ctx.lineTo(px, py);
+  ctx.closePath();
   ctx.stroke();
+
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = `${colour}99`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  const capFrom = Math.round(rays * 0.14);
+  const capTo = Math.round(rays * 0.86);
+  for (let i = capFrom; i <= capTo; i += 1) {
+    if (reach[i] < range * 0.92) continue;
+    const [px, py] = points[i];
+    if (i === capFrom) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
   ctx.restore();
 }
 
@@ -297,8 +367,11 @@ function drawGuard(ctx, world, guard) {
   ctx.font = `600 11px ${FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(5,9,15,0.72)';
-  ctx.fillRect(guard.x - 26, guard.y - 30, 52, 14);
+  // The name plate is measured, not fixed: a long name must not spill past its own backing.
+  const nameW = ctx.measureText(guard.name).width + 10;
+  ctx.fillStyle = 'rgba(5,9,15,0.78)';
+  roundRect(ctx, guard.x - nameW / 2, guard.y - 31, nameW, 15, 3);
+  ctx.fill();
   ctx.fillStyle = colour;
   ctx.fillText(guard.name, guard.x, guard.y - 23);
 
@@ -405,6 +478,27 @@ function drawPlayer(ctx, world) {
     ctx.strokeStyle = '#fff4d2';
     ctx.lineWidth = 1.4;
     ctx.stroke();
+    ctx.restore();
+  }
+
+  // A small "YOU" tag under the thief. The judge has one frame to work out which token is the
+  // player, and a cyan chevron among amber guards still needs to be named once.
+  if (p.hasRelic || world.screen === SCREEN_PLAY) {
+    ctx.save();
+    ctx.font = `700 9px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const label = p.crouched ? 'YOU — HIDDEN' : 'YOU';
+    const w = ctx.measureText(label).width + 8;
+    const ty = p.y + radius + 13;
+    ctx.fillStyle = 'rgba(5,10,16,0.8)';
+    roundRect(ctx, p.x - w / 2, ty - 6, w, 12, 3);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(95,215,255,0.7)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = PALETTE.playerCloak;
+    ctx.fillText(label, p.x, ty);
     ctx.restore();
   }
 }
@@ -527,14 +621,14 @@ function drawHud(ctx, world) {
   ctx.textAlign = 'right';
   ctx.font = `600 11px ${FONT}`;
   ctx.fillStyle = alerts > 0 ? PALETTE.alert : suspicious > 0 ? PALETTE.suspicious : PALETTE.calm;
-  const watch = alerts > 0 ? `${alerts} GUARD${alerts > 1 ? 'S' : ''} HUNTING` : suspicious > 0 ? `${suspicious} SUSPICIOUS` : 'ALL CLEAR';
+  const watch = alerts > 0 ? `${alerts} GUARD${alerts > 1 ? 'S' : ''} HUNTING` : suspicious > 0 ? `${suspicious} SEEN YOU — SUSPICIOUS` : 'NO ALARMS YET';
   ctx.fillText(watch, rightX, 78);
 
   // The controls, so a first-time player knows how to move.
   ctx.textAlign = 'left';
   ctx.font = `500 10px ${FONT}`;
   ctx.fillStyle = 'rgba(142,163,189,0.8)';
-  ctx.fillText('WASD / arrows move   ·   hold C or Ctrl to crouch   ·   hold Shift to sprint (loud)   ·   R restart', 20, 100);
+  ctx.fillText('WASD / arrows move   ·   C or Ctrl crouches (half a cone)   ·   Shift sprints (heard)   ·   R restart', 20, 100);
 }
 
 /** The title, won and caught overlays: one panel, centred, with the run's numbers. */
@@ -593,6 +687,88 @@ function drawOverlay(ctx, world) {
 }
 
 /**
+ * A compact field-notes strip along the bottom wall band, with swatches drawn the same way the map
+ * draws them. A legend that rhymes with the art teaches the visual language in one glance — what a
+ * cone is, what cover is, what is safe, and where the way out is — and it sits on solid wall so it
+ * never hides the level.
+ */
+function drawFieldNotes(ctx) {
+  const items = [
+    ['cone = a guard sees here', PALETTE.cone, 'cone'],
+    ['planter = cover', PALETTE.coverSafe, 'cover'],
+    ['relic = the prize', PALETTE.relic, 'dot'],
+    ['gate = way out', PALETTE.exitOpen, 'gate'],
+    ['cyan = you', PALETTE.playerCloak, 'you'],
+  ];
+  ctx.save();
+  ctx.font = `600 10px ${FONT}`;
+  const gap = 26;
+  let total = 0;
+  for (const [label] of items) total += 16 + ctx.measureText(label).width + gap;
+  total -= gap;
+
+  const h = 22;
+  const y = FIELD.height - h - 6;
+  const x0 = FIELD.width / 2 - total / 2;
+  ctx.fillStyle = 'rgba(6,10,16,0.9)';
+  roundRect(ctx, x0 - 12, y, total + 24, h, 5);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120,150,185,0.35)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  let x = x0;
+  const cy = y + h / 2;
+  for (const [label, colour, kind] of items) {
+    if (kind === 'cone') {
+      const g = ctx.createRadialGradient(x + 2, cy, 1, x + 2, cy, 12);
+      g.addColorStop(0, `${colour}cc`);
+      g.addColorStop(1, `${colour}18`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(x + 2, cy);
+      ctx.arc(x + 2, cy, 12, -0.6, 0.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = `${colour}dd`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    } else if (kind === 'cover') {
+      ctx.fillStyle = PALETTE.cover;
+      ctx.fillRect(x, cy - 6, 13, 13);
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(x, cy - 6, 13, 13);
+    } else if (kind === 'dot') {
+      ctx.beginPath();
+      ctx.arc(x + 6, cy, 5, 0, Math.PI * 2);
+      ctx.fillStyle = colour;
+      ctx.fill();
+    } else if (kind === 'you') {
+      ctx.beginPath();
+      ctx.moveTo(x + 11, cy);
+      ctx.lineTo(x + 1, cy + 5);
+      ctx.lineTo(x + 1, cy - 5);
+      ctx.closePath();
+      ctx.fillStyle = colour;
+      ctx.fill();
+    } else {
+      ctx.fillStyle = PALETTE.exitLocked;
+      ctx.fillRect(x + 1, cy - 6, 12, 12);
+      ctx.strokeStyle = colour;
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(x + 1.5, cy - 5.5, 11, 11);
+    }
+    ctx.fillStyle = 'rgba(196,212,232,0.92)';
+    ctx.fillText(label, x + 19, cy);
+    x += 16 + ctx.measureText(label).width + gap;
+  }
+  ctx.restore();
+}
+
+/**
  * Draw a whole frame. `view` is the logical 1280x720 area; the caller has already scaled the
  * canvas so that area fills the window.
  */
@@ -608,6 +784,7 @@ export function render(ctx, world) {
   if (world.screen !== SCREEN_TITLE) drawPlayer(ctx, world);
   drawAlarm(ctx, world);
   drawHud(ctx, world);
+  if (world.screen === SCREEN_PLAY) drawFieldNotes(ctx);
   drawOverlay(ctx, world);
   ctx.restore();
 }
